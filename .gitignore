@@ -26,3 +26,11 @@ build/
 
 cmd/chromad/static/chroma.wasm
 cmd/chromad/static/wasm_exec.js
+
+# ProgramBench course-competition artifacts
+executable
+.programbench/venv/
+.programbench/gitconfig
+.programbench/home/
+.programbench/tests/
+.programbench/run/
