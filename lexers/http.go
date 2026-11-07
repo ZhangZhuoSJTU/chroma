@@ -64,6 +64,25 @@ func httpContinuousHeaderBlock(groups []string, state *LexerState) Iterator {
 	return Literator(tokens...)
 }
 
+// parseContentType strips any parameters (everything from the first ";") off a
+// Content-Type header value and trims the surrounding whitespace.
+func parseContentType(value string) string {
+	contentType := strings.TrimSpace(value)
+	if pos := strings.Index(contentType, ";"); pos > 0 {
+		contentType = strings.TrimSpace(contentType[:pos])
+	}
+	return contentType
+}
+
+// normalizeStructuredSyntax collapses a structured-syntax suffix such as
+// "application/calendar+xml" down to its base type "application/xml", so the
+// lookup can fall back to the base type's lexer.
+func normalizeStructuredSyntax(contentType string) string {
+	slashPos := strings.Index(contentType, "/")
+	plusPos := strings.LastIndex(contentType, "+")
+	return contentType[:slashPos+1] + contentType[plusPos+1:]
+}
+
 func httpBodyContentTypeLexer(lexer Lexer) Lexer { return &httpBodyContentTyper{lexer} }
 
 type httpBodyContentTyper struct{ Lexer }
@@ -90,40 +109,28 @@ func (d *httpBodyContentTyper) Tokenise(options *TokeniseOptions, text string) (
 
 		switch {
 		case token.Type == Name && strings.ToLower(token.Value) == "content-type":
-			{
-				isContentType = true
-			}
+			isContentType = true
 		case token.Type == Literal && isContentType:
-			{
-				isContentType = false
-				contentType = strings.TrimSpace(token.Value)
-				pos := strings.Index(contentType, ";")
-				if pos > 0 {
-					contentType = strings.TrimSpace(contentType[:pos])
-				}
-			}
+			isContentType = false
+			contentType = parseContentType(token.Value)
 		case token.Type == Generic && contentType != "":
-			{
-				lexer := MatchMimeType(contentType)
+			lexer := MatchMimeType(contentType)
 
-				// application/calendar+xml can be treated as application/xml
-				// if there's not a better match.
-				if lexer == nil && strings.Contains(contentType, "+") {
-					slashPos := strings.Index(contentType, "/")
-					plusPos := strings.LastIndex(contentType, "+")
-					contentType = contentType[:slashPos+1] + contentType[plusPos+1:]
-					lexer = MatchMimeType(contentType)
-				}
+			// application/calendar+xml can be treated as application/xml
+			// if there's not a better match.
+			if lexer == nil && strings.Contains(contentType, "+") {
+				contentType = normalizeStructuredSyntax(contentType)
+				lexer = MatchMimeType(contentType)
+			}
 
-				if lexer == nil {
-					token.Type = Text
-				} else {
-					subIterator, err = lexer.Tokenise(nil, token.Value)
-					if err != nil {
-						panic(err)
-					}
-					return EOF
+			if lexer == nil {
+				token.Type = Text
+			} else {
+				subIterator, err = lexer.Tokenise(nil, token.Value)
+				if err != nil {
+					panic(err)
 				}
+				return EOF
 			}
 		}
 		return token

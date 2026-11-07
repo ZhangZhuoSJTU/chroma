@@ -615,33 +615,57 @@ func haxeRules() Rules {
 	}
 }
 
+// haxePreProcStack records, for each open `#if`, the lexer state stack as it
+// stood when the conditional block began. `#else`/`#elseif` rewind to that
+// captured state so that both arms of a conditional are lexed from the same
+// context, and `#end` drops the record once the block closes.
+type haxePreProcStack struct {
+	frames [][]string
+}
+
+func (s *haxePreProcStack) push(frame []string) {
+	s.frames = append(s.frames, frame)
+}
+
+// pop discards the innermost record. A stray `#end` with no open block is
+// tolerated rather than fatal, so malformed preprocessor nesting cannot take
+// the lexer down.
+func (s *haxePreProcStack) pop() {
+	if n := len(s.frames); n > 0 {
+		s.frames = s.frames[:n-1]
+	}
+}
+
+// restore returns the state captured at the innermost open `#if`. The grammar
+// only routes `#else`/`#elseif` through this mutator from inside an already
+// open `#if` block, so a captured record is always present here.
+func (s *haxePreProcStack) restore() []string {
+	return s.frames[len(s.frames)-1]
+}
+
 func haxePreProcMutator(state *LexerState) error {
-	stack, ok := state.Get("haxe-pre-proc").([][]string)
+	stack, ok := state.Get("haxe-pre-proc").(*haxePreProcStack)
 	if !ok {
-		stack = [][]string{}
+		stack = &haxePreProcStack{}
 	}
 
 	proc := state.Groups[2]
 	switch proc {
 	case "if":
-		stack = append(stack, state.Stack)
+		stack.push(state.Stack)
 	case "else", "elseif":
-		if len(stack) > 0 {
-			state.Stack = stack[len(stack)-1]
-		}
+		state.Stack = stack.restore()
 	case "end":
-		if len(stack) > 0 {
-			stack = stack[:len(stack)-1]
-		}
+		stack.pop()
 	}
 
-	if proc == "if" || proc == "elseif" {
+	switch proc {
+	case "if", "elseif":
 		state.Stack = append(state.Stack, "preproc-expr")
-	}
-
-	if proc == "error" {
+	case "error":
 		state.Stack = append(state.Stack, "preproc-error")
 	}
+
 	state.Set("haxe-pre-proc", stack)
 	return nil
 }

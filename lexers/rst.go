@@ -63,7 +63,6 @@ func restructuredtextRules() Rules {
 }
 
 func rstCodeBlock(groups []string, state *LexerState) Iterator {
-	iterators := []Iterator{}
 	tokens := []Token{
 		{Punctuation, groups[1]},
 		{Text, groups[2]},
@@ -74,16 +73,17 @@ func rstCodeBlock(groups []string, state *LexerState) Iterator {
 		{Text, groups[7]},
 	}
 	code := strings.Join(groups[8:], "")
-	lexer := Get(groups[6])
-	if lexer == nil {
-		tokens = append(tokens, Token{String, code})
-		iterators = append(iterators, Literator(tokens...))
-	} else {
+
+	// When the embedded language is known, highlight the block with its lexer
+	// and append the result after the directive tokens.
+	if lexer := Get(groups[6]); lexer != nil {
 		sub, err := lexer.Tokenise(nil, code)
 		if err != nil {
 			panic(err)
 		}
-		iterators = append(iterators, Literator(tokens...), sub)
+		return Concaterator(Literator(tokens...), sub)
 	}
-	return Concaterator(iterators...)
+
+	tokens = append(tokens, Token{String, code})
+	return Concaterator(Literator(tokens...))
 }
