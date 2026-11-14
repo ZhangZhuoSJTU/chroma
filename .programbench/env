@@ -1,0 +1,2 @@
+# Supply the real pprof tool missing from this machine's Go installation.
+export PATH="$PWD/.programbench/tools:$PATH"

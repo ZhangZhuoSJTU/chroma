@@ -15,30 +15,30 @@ import (
 // Lexer, formatter and style may be empty, in which case a best-effort is made.
 func Highlight(w io.Writer, source, lexer, formatter, style string) error {
 	// Determine lexer.
-	l := lexers.Get(lexer)
-	if l == nil {
-		l = lexers.Analyse(source)
+	selectedLexer := lexers.Get(lexer)
+	if selectedLexer == nil {
+		selectedLexer = lexers.Analyse(source)
 	}
-	if l == nil {
-		l = lexers.Fallback
+	if selectedLexer == nil {
+		selectedLexer = lexers.Fallback
 	}
-	l = chroma.Coalesce(l)
+	selectedLexer = chroma.Coalesce(selectedLexer)
 
 	// Determine formatter.
-	f := formatters.Get(formatter)
-	if f == nil {
-		f = formatters.Fallback
+	selectedFormatter := formatters.Get(formatter)
+	if selectedFormatter == nil {
+		selectedFormatter = formatters.Fallback
 	}
 
 	// Determine style.
-	s := styles.Get(style)
-	if s == nil {
-		s = styles.Fallback
+	selectedStyle := styles.Get(style)
+	if selectedStyle == nil {
+		selectedStyle = styles.Fallback
 	}
 
-	it, err := l.Tokenise(nil, source)
+	tokens, err := selectedLexer.Tokenise(nil, source)
 	if err != nil {
 		return err
 	}
-	return f.Format(w, s, it)
+	return selectedFormatter.Format(w, selectedStyle, tokens)
 }

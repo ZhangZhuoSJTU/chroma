@@ -6,6 +6,7 @@ func Coalesce(lexer Lexer) Lexer { return &coalescer{lexer} }
 type coalescer struct{ Lexer }
 
 func (d *coalescer) Tokenise(options *TokeniseOptions, text string) (Iterator, error) {
+	// Missing trailing text warrants checking the pending token's EOF flush below.
 	var prev Token
 	it, err := d.Lexer.Tokenise(options, text)
 	if err != nil {

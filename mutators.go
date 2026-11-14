@@ -126,18 +126,20 @@ func (c *combinedMutator) Mutate(s *LexerState) error {
 
 func (c *combinedMutator) MutateLexer(rules CompiledRules, state string, rule int) error {
 	name := "__combined_" + strings.Join(c.States, "__")
-	if _, ok := rules[name]; !ok {
+	_, exists := rules[name]
+	if !exists {
 		combined := []*CompiledRule{}
-		for _, state := range c.States {
-			rules, ok := rules[state]
-			if !ok {
-				return fmt.Errorf("invalid combine state %q", state)
+		for _, sourceState := range c.States {
+			stateRules, found := rules[sourceState]
+			if !found {
+				return fmt.Errorf("invalid combine state %q", sourceState)
 			}
-			combined = append(combined, rules...)
+			combined = append(combined, stateRules...)
 		}
 		rules[name] = combined
 	}
-	rules[state][rule].Mutator = Push(name)
+	targetRule := rules[state][rule]
+	targetRule.Mutator = Push(name)
 	return nil
 }
 

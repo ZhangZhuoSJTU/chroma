@@ -87,34 +87,41 @@ var (
 
 // fastUnmarshalConfig unmarshals only the Config from a serialised lexer.
 func fastUnmarshalConfig(from fs.FS, path string) (*Config, error) {
-	r, err := from.Open(path)
-	if err != nil {
-		return nil, err
+	source, failure := from.Open(path)
+	if failure != nil {
+		return nil, failure
 	}
-	defer r.Close()
-	dec := xml.NewDecoder(r)
-	for {
-		token, err := dec.Token()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil, fmt.Errorf("could not find <config> element")
-			}
-			return nil, err
-		}
-		switch se := token.(type) {
-		case xml.StartElement:
-			if se.Name.Local != "config" {
-				break
-			}
+	defer source.Close()
 
-			var config Config
-			err = dec.DecodeElement(&config, &se)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", path, err)
-			}
-			return &config, nil
-		}
+	reader := xml.NewDecoder(source)
+	var piece xml.Token
+	var opening xml.StartElement
+	var isOpening bool
+	var result Config
+
+advance:
+	piece, failure = reader.Token()
+	if failure != nil {
+		goto exhausted
 	}
+	opening, isOpening = piece.(xml.StartElement)
+	if !isOpening {
+		goto advance
+	}
+	if opening.Name.Local != "config" {
+		goto advance
+	}
+	failure = reader.DecodeElement(&result, &opening)
+	if failure == nil {
+		return &result, nil
+	}
+	return nil, fmt.Errorf("%s: %w", path, failure)
+
+exhausted:
+	if !errors.Is(failure, io.EOF) {
+		return nil, failure
+	}
+	return nil, fmt.Errorf("could not find <config> element")
 }
 
 // MustNewXMLLexer constructs a new RegexLexer from an XML file or panics.

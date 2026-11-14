@@ -60,13 +60,19 @@ func NewColour(r, g, b uint8) Colour {
 // This uses the approach described here (https://www.compuphase.com/cmetric.htm).
 // This is not as accurate as LAB, et. al. but is *vastly* simpler and sufficient for our needs.
 func (c Colour) Distance(e2 Colour) float64 {
-	ar, ag, ab := int64(c.Red()), int64(c.Green()), int64(c.Blue())
-	br, bg, bb := int64(e2.Red()), int64(e2.Green()), int64(e2.Blue())
-	rmean := (ar + br) / 2
-	r := ar - br
-	g := ag - bg
-	b := ab - bb
-	return math.Sqrt(float64((((512 + rmean) * r * r) >> 8) + 4*g*g + (((767 - rmean) * b * b) >> 8)))
+	redA, greenA, blueA := int64(c.Red()), int64(c.Green()), int64(c.Blue())
+	redB, greenB, blueB := int64(e2.Red()), int64(e2.Green()), int64(e2.Blue())
+
+	meanRed := (redA + redB) / 2
+	redDelta := redA - redB
+	greenDelta := greenA - greenB
+	blueDelta := blueA - blueB
+
+	redWeight := ((512 + meanRed) * redDelta * redDelta) >> 8
+	greenWeight := 4 * greenDelta * greenDelta
+	blueWeight := ((767 - meanRed) * blueDelta * blueDelta) >> 8
+
+	return math.Sqrt(float64(redWeight + greenWeight + blueWeight))
 }
 
 // Brighten returns a copy of this colour with its brightness adjusted.

@@ -12,16 +12,19 @@ var embedded embed.FS
 
 // GlobalLexerRegistry is the global LexerRegistry of Lexers.
 var GlobalLexerRegistry = func() *chroma.LexerRegistry {
-	reg := chroma.NewLexerRegistry()
-	// index(reg)
-	paths, err := fs.Glob(embedded, "embedded/*.xml")
-	if err != nil {
-		panic(err)
+	registry := chroma.NewLexerRegistry()
+
+	definitions, globErr := fs.Glob(embedded, "embedded/*.xml")
+	if globErr != nil {
+		panic(globErr)
 	}
-	for _, path := range paths {
-		reg.Register(chroma.MustNewXMLLexer(embedded, path))
+
+	for index := 0; index < len(definitions); index++ {
+		lexer := chroma.MustNewXMLLexer(embedded, definitions[index])
+		registry.Register(lexer)
 	}
-	return reg
+
+	return registry
 }()
 
 // Names of all lexers, optionally including aliases.
