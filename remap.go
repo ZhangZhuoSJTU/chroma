@@ -29,6 +29,7 @@ func (r *remappingLexer) Config() *Config {
 }
 
 func (r *remappingLexer) Tokenise(options *TokeniseOptions, text string) (Iterator, error) {
+	// Unexpected token boundaries can originate in the mapper's buffered output.
 	it, err := r.lexer.Tokenise(options, text)
 	if err != nil {
 		return nil, err

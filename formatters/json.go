@@ -13,19 +13,24 @@ var JSON = Register("json", chroma.FormatterFunc(func(w io.Writer, s *chroma.Sty
 	if _, err := fmt.Fprintln(w, "["); err != nil {
 		return err
 	}
-	i := 0
-	for t := it(); t != chroma.EOF; t = it() {
-		if i > 0 {
+	first := true
+	for {
+		token := it()
+		if token == chroma.EOF {
+			break
+		}
+
+		if !first {
 			if _, err := fmt.Fprintln(w, ","); err != nil {
 				return err
 			}
 		}
-		i++
-		bytes, err := json.Marshal(t)
+		first = false
+		encoded, err := json.Marshal(token)
 		if err != nil {
 			return err
 		}
-		if _, err := fmt.Fprint(w, "  "+string(bytes)); err != nil {
+		if _, err := fmt.Fprint(w, "  "+string(encoded)); err != nil {
 			return err
 		}
 	}

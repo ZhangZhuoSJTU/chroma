@@ -271,22 +271,26 @@ func (s *Style) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
 	if err := e.EncodeToken(start); err != nil {
 		return err
 	}
-	sorted := make([]TokenType, 0, len(s.entries))
-	for ttype := range s.entries {
-		sorted = append(sorted, ttype)
+	tokenTypes := make([]TokenType, 0, len(s.entries))
+	for tokenType := range s.entries {
+		tokenTypes = append(tokenTypes, tokenType)
 	}
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
-	for _, ttype := range sorted {
-		entry := s.entries[ttype]
-		el := xml.StartElement{Name: xml.Name{Local: "entry"}}
-		el.Attr = []xml.Attr{
-			{Name: xml.Name{Local: "type"}, Value: ttype.String()},
-			{Name: xml.Name{Local: "style"}, Value: entry.String()},
+	sort.Slice(tokenTypes, func(i, j int) bool {
+		return tokenTypes[i] < tokenTypes[j]
+	})
+	for _, tokenType := range tokenTypes {
+		styleEntry := s.entries[tokenType]
+		element := xml.StartElement{
+			Name: xml.Name{Local: "entry"},
+			Attr: []xml.Attr{
+				{Name: xml.Name{Local: "type"}, Value: tokenType.String()},
+				{Name: xml.Name{Local: "style"}, Value: styleEntry.String()},
+			},
 		}
-		if err := e.EncodeToken(el); err != nil {
+		if err := e.EncodeToken(element); err != nil {
 			return err
 		}
-		if err := e.EncodeToken(xml.EndElement{Name: el.Name}); err != nil {
+		if err := e.EncodeToken(xml.EndElement{Name: element.Name}); err != nil {
 			return err
 		}
 	}

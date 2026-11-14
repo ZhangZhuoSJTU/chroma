@@ -1,0 +1,6 @@
+#!/bin/bash
+if [[ "${1:-}" == tool && "${2:-}" == pprof ]]; then
+    shift 2
+    exec "$(dirname "$0")/pprof" "$@"
+fi
+exec /usr/local/go/bin/go "$@"

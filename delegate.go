@@ -59,88 +59,89 @@ type insertion struct {
 }
 
 func (d *delegatingLexer) Tokenise(options *TokeniseOptions, text string) (Iterator, error) { // nolint: gocognit
-	tokens, err := Tokenise(Coalesce(d.language), options, text)
+	languageTokens, err := Tokenise(Coalesce(d.language), options, text)
 	if err != nil {
 		return nil, err
 	}
-	// Compute insertions and gather "Other" tokens.
-	others := &bytes.Buffer{}
+	// Compute insertions and gather "Other" languageTokens.
+	otherText := &bytes.Buffer{}
 	insertions := []*insertion{}
-	var insert *insertion
-	offset := 0
-	var last Token
-	for _, t := range tokens {
-		if t.Type == Other {
-			if last != EOF && insert != nil && last.Type != Other {
-				insert.end = offset
+	var currentInsertion *insertion
+	position := 0
+	var previous Token
+	for _, token := range languageTokens {
+		switch token.Type {
+		case Other:
+			if previous != EOF && currentInsertion != nil && previous.Type != Other {
+				currentInsertion.end = position
 			}
-			others.WriteString(t.Value)
-		} else {
-			if last == EOF || last.Type == Other {
-				insert = &insertion{start: offset}
-				insertions = append(insertions, insert)
+			otherText.WriteString(token.Value)
+
+		default:
+			if previous == EOF || previous.Type == Other {
+				currentInsertion = &insertion{start: position}
+				insertions = append(insertions, currentInsertion)
 			}
-			insert.tokens = append(insert.tokens, t)
+			currentInsertion.tokens = append(currentInsertion.tokens, token)
 		}
-		last = t
-		offset += len(t.Value)
+		previous = token
+		position += len(token.Value)
 	}
 
 	if len(insertions) == 0 {
 		return d.root.Tokenise(options, text)
 	}
 
-	// Lex the other tokens.
-	rootTokens, err := Tokenise(Coalesce(d.root), options, others.String())
+	// Lex the other languageTokens.
+	rootTokens, err := Tokenise(Coalesce(d.root), options, otherText.String())
 	if err != nil {
 		return nil, err
 	}
 
-	// Interleave the two sets of tokens.
-	var out []Token
-	offset = 0 // Offset into text.
+	// Interleave the two sets of languageTokens.
+	var output []Token
+	position = 0 // Offset into text.
 	tokenIndex := 0
 	nextToken := func() Token {
 		if tokenIndex >= len(rootTokens) {
 			return EOF
 		}
-		t := rootTokens[tokenIndex]
+		token := rootTokens[tokenIndex]
 		tokenIndex++
-		return t
+		return token
 	}
 	insertionIndex := 0
 	nextInsertion := func() *insertion {
 		if insertionIndex >= len(insertions) {
 			return nil
 		}
-		i := insertions[insertionIndex]
+		entry := insertions[insertionIndex]
 		insertionIndex++
-		return i
+		return entry
 	}
-	t := nextToken()
-	i := nextInsertion()
-	for t != EOF || i != nil {
-		// fmt.Printf("%d->%d:%q   %d->%d:%q\n", offset, offset+len(t.Value), t.Value, i.start, i.end, Stringify(i.tokens...))
-		if t == EOF || (i != nil && i.start < offset+len(t.Value)) {
-			var l Token
-			l, t = splitToken(t, i.start-offset)
-			if l != EOF {
-				out = append(out, l)
-				offset += len(l.Value)
+	token := nextToken()
+	entry := nextInsertion()
+	for token != EOF || entry != nil {
+		if token == EOF || (entry != nil && entry.start < position+len(token.Value)) {
+			var leading Token
+			leading, token = splitToken(token, entry.start-position)
+			if leading != EOF {
+				output = append(output, leading)
+				position += len(leading.Value)
 			}
-			out = append(out, i.tokens...)
-			offset += i.end - i.start
-			if t == EOF {
-				t = nextToken()
+			output = append(output, entry.tokens...)
+			position += entry.end - entry.start
+			if token == EOF {
+				token = nextToken()
 			}
-			i = nextInsertion()
+			entry = nextInsertion()
 		} else {
-			out = append(out, t)
-			offset += len(t.Value)
-			t = nextToken()
+			output = append(output, token)
+			position += len(token.Value)
+			token = nextToken()
 		}
 	}
-	return Literator(out...), nil
+	return Literator(output...), nil
 }
 
 func splitToken(t Token, offset int) (l Token, r Token) {

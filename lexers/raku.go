@@ -54,7 +54,7 @@ func rakuRules() Rules {
 		globalVariablePattern = `[$@%&]+\*` + namePattern
 	)
 
-	keywords := []string{
+	reservedWords := []string{
 		`BEGIN`, `CATCH`, `CHECK`, `CLOSE`, `CONTROL`, `DOC`, `END`, `ENTER`, `FIRST`, `INIT`,
 		`KEEP`, `LAST`, `LEAVE`, `NEXT`, `POST`, `PRE`, `QUIT`, `UNDO`, `anon`, `augment`, `but`,
 		`class`, `constant`, `default`, `does`, `else`, `elsif`, `enum`, `for`, `gather`, `given`,
@@ -68,9 +68,9 @@ func rakuRules() Rules {
 		`dynamic-scope`, `built`, `temp`,
 	}
 
-	keywordsPattern := Words(`(?<!['\w:-])`, `(?!['\w:-])`, keywords...)
+	reservedWordPattern := Words(`(?<!['\w:-])`, `(?!['\w:-])`, reservedWords...)
 
-	wordOperators := []string{
+	namedOperators := []string{
 		`X`, `Z`, `R`, `after`, `and`, `andthen`, `before`, `cmp`, `div`, `eq`, `eqv`, `extra`, `ge`,
 		`gt`, `le`, `leg`, `lt`, `mod`, `ne`, `or`, `orelse`, `x`, `xor`, `xx`, `gcd`, `lcm`,
 		`but`, `min`, `max`, `^fff`, `fff^`, `fff`, `^ff`, `ff^`, `ff`, `so`, `not`, `unicmp`,
@@ -78,9 +78,9 @@ func rakuRules() Rules {
 		`(cont)`, `(<)`, `(<=)`, `(>)`, `(>=)`, `minmax`, `notandthen`, `S`,
 	}
 
-	wordOperatorsPattern := Words(`(?<=^|\b|\s)`, `(?=$|\b|\s)`, wordOperators...)
+	namedOperatorPattern := Words(`(?<=^|\b|\s)`, `(?=$|\b|\s)`, namedOperators...)
 
-	operators := []string{
+	symbolOperators := []string{
 		`++`, `--`, `-`, `**`, `!`, `+`, `~`, `?`, `+^`, `~^`, `?^`, `^`, `*`, `/`, `%`, `%%`, `+&`,
 		`+<`, `+>`, `~&`, `~<`, `~>`, `?&`, `+|`, `+^`, `~|`, `~^`, `?`, `?|`, `?^`, `&`, `^`,
 		`<=>`, `^…^`, `^…`, `…^`, `…`, `...`, `...^`, `^...`, `^...^`, `..`, `..^`, `^..`, `^..^`,
@@ -91,9 +91,9 @@ func rakuRules() Rules {
 		`⊃`, `⊅`, `⊇`, `⊉`, `:`, `!!!`, `???`, `¯`, `×`, `÷`, `−`, `⁺`, `⁻`,
 	}
 
-	operatorsPattern := Words(``, ``, operators...)
+	symbolOperatorPattern := Words(``, ``, symbolOperators...)
 
-	builtinTypes := []string{
+	typeNames := []string{
 		`False`, `True`, `Order`, `More`, `Less`, `Same`, `Any`, `Array`, `Associative`, `AST`,
 		`atomicint`, `Attribute`, `Backtrace`, `Backtrace::Frame`, `Bag`, `Baggy`, `BagHash`,
 		`Blob`, `Block`, `Bool`, `Buf`, `Callable`, `CallFrame`, `Cancellation`, `Capture`,
@@ -140,9 +140,9 @@ func rakuRules() Rules {
 		`strict`, `trace`, `variables`,
 	}
 
-	builtinTypesPattern := Words(`(?<!['\w:-])`, `(?::[_UD])?(?!['\w:-])`, builtinTypes...)
+	typeNamePattern := Words(`(?<!['\w:-])`, `(?::[_UD])?(?!['\w:-])`, typeNames...)
 
-	builtinRoutines := []string{
+	routineNames := []string{
 		`ACCEPTS`, `abs`, `abs2rel`, `absolute`, `accept`, `accepts_type`, `accessed`, `acos`,
 		`acosec`, `acosech`, `acosh`, `acotan`, `acotanh`, `acquire`, `act`, `action`, `actions`,
 		`add`, `add_attribute`, `add_enum_value`, `add_fallback`, `add_method`, `add_parent`,
@@ -264,10 +264,10 @@ func rakuRules() Rules {
 		`yyyy-mm-dd`, `z`, `zip`, `zip-latest`, `HOW`, `s`, `DEPRECATED`, `trait_mod`,
 	}
 
-	builtinRoutinesPattern := Words(`(?<!['\w:-])`, `(?!['\w-])`, builtinRoutines...)
+	routineNamePattern := Words(`(?<!['\w:-])`, `(?!['\w-])`, routineNames...)
 
 	// A map of opening and closing brackets
-	brackets := map[rune]rune{
+	delimiterPairs := map[rune]rune{
 		'\u0028': '\u0029', '\u003c': '\u003e', '\u005b': '\u005d',
 		'\u007b': '\u007d', '\u00ab': '\u00bb', '\u0f3a': '\u0f3b',
 		'\u0f3c': '\u0f3d', '\u169b': '\u169c', '\u2018': '\u2019',
@@ -334,11 +334,11 @@ func rakuRules() Rules {
 		'\uff5b': '\uff5d', '\uff5f': '\uff60', '\uff62': '\uff63',
 	}
 
-	bracketsPattern := `[` + regexp.QuoteMeta(joinRuneMap(brackets)) + `]`
+	delimiterPattern := `[` + regexp.QuoteMeta(joinRuneMap(delimiterPairs)) + `]`
 
 	// Finds opening brackets and their closing counterparts (including pod and heredoc)
 	// and modifies state groups and position accordingly
-	findBrackets := func(tokenClass RakuToken) MutatorFunc {
+	locateDelimiters := func(tokenClass RakuToken) MutatorFunc {
 		return func(state *LexerState) error {
 			var openingChars []rune
 			var adverbs []rune
@@ -362,7 +362,7 @@ func rakuRules() Rules {
 			case rakuPod:
 				closingCharExists = true
 			default:
-				closingChar, closingCharExists = brackets[openingChar]
+				closingChar, closingCharExists = delimiterPairs[openingChar]
 			}
 
 			switch tokenClass {
@@ -590,9 +590,9 @@ func rakuRules() Rules {
 			Include("pod"),
 			// Multi-line, Embedded comment
 			{
-				"#`(?<opening_delimiters>(?<delimiter>" + bracketsPattern + `)\k<delimiter>*)`,
+				"#`(?<opening_delimiters>(?<delimiter>" + delimiterPattern + `)\k<delimiter>*)`,
 				CommentMultiline,
-				findBrackets(rakuMultilineComment),
+				locateDelimiters(rakuMultilineComment),
 			},
 			{`#[^\n]*$`, CommentSingle, nil},
 			// /regex/
@@ -655,9 +655,9 @@ func rakuRules() Rules {
 			},
 			// Substitution
 			{`(?<=^|\b|\s)(?<!\.)(ss|S|s|TR|tr)\b(\s*)`, ByGroups(Keyword, Text), Push("substitution")},
-			{keywordsPattern, Keyword, nil},
-			{builtinTypesPattern, KeywordType, nil},
-			{builtinRoutinesPattern, NameBuiltin, nil},
+			{reservedWordPattern, Keyword, nil},
+			{typeNamePattern, KeywordType, nil},
+			{routineNamePattern, NameBuiltin, nil},
 			// Class name
 			{
 				`(?<=(?:^|\s)(?:class|grammar|role|does|but|is|subset|of)\s+)` + namePattern,
@@ -683,7 +683,7 @@ func rakuRules() Rules {
 			{
 				`(?<=^|\b|\s)(?<keyword>(?:qq|q|Q))(?<adverbs>(?::?(?:heredoc|to|qq|ww|q|w|s|a|h|f|c|b|to|v|x))*)(?<ws>\s*)(?<opening_delimiters>(?<delimiter>[^0-9a-zA-Z:\s])\k<delimiter>*)`,
 				EmitterFunc(quote),
-				findBrackets(rakuQuote),
+				locateDelimiters(rakuQuote),
 			},
 			// Function
 			{
@@ -720,25 +720,25 @@ func rakuRules() Rules {
 						`delimiter`:          nil,
 					},
 				),
-				findBrackets(rakuMatchRegex),
+				locateDelimiters(rakuMatchRegex),
 			},
 		},
 		"substitution": {
 			Include("colon-pair-attribute"),
 			// Substitution | s{regex} = value
 			{
-				`(?<opening_delimiters>(?<delimiter>` + bracketsPattern + `)\k<delimiter>*)`,
+				`(?<opening_delimiters>(?<delimiter>` + delimiterPattern + `)\k<delimiter>*)`,
 				ByGroupNames(map[string]Emitter{
 					`opening_delimiters`: Punctuation,
 					`delimiter`:          nil,
 				}),
-				findBrackets(rakuMatchRegex),
+				locateDelimiters(rakuMatchRegex),
 			},
 			// Substitution | s/regex/string/
 			{
 				`(?<opening_delimiters>[^\w:\s])`,
 				Punctuation,
-				findBrackets(rakuSubstitutionRegex),
+				locateDelimiters(rakuSubstitutionRegex),
 			},
 		},
 		"number": {
@@ -760,7 +760,7 @@ func rakuRules() Rules {
 		},
 		"colon-pair": {
 			// :key(value)
-			{colonPairPattern, colonPair(String), findBrackets(rakuNameAttribute)},
+			{colonPairPattern, colonPair(String), locateDelimiters(rakuNameAttribute)},
 			// :123abc
 			{
 				`(:)(\d+)(\w[\w'-]*)`,
@@ -773,7 +773,7 @@ func rakuRules() Rules {
 		},
 		"colon-pair-attribute": {
 			// :key(value)
-			{colonPairPattern, colonPair(NameAttribute), findBrackets(rakuNameAttribute)},
+			{colonPairPattern, colonPair(NameAttribute), locateDelimiters(rakuNameAttribute)},
 			// :123abc
 			{
 				`(:)(\d+)(\w[\w'-]*)`,
@@ -786,7 +786,7 @@ func rakuRules() Rules {
 		},
 		"colon-pair-attribute-keyvalue": {
 			// :key(value)
-			{colonPairPattern, colonPair(NameAttribute), findBrackets(rakuNameAttribute)},
+			{colonPairPattern, colonPair(NameAttribute), locateDelimiters(rakuNameAttribute)},
 		},
 		"escape-qq": {
 			{
@@ -1015,16 +1015,16 @@ func rakuRules() Rules {
 		},
 		"operator": {
 			// Word Operator
-			{wordOperatorsPattern, OperatorWord, nil},
+			{namedOperatorPattern, OperatorWord, nil},
 			// Operator
-			{operatorsPattern, Operator, nil},
+			{symbolOperatorPattern, Operator, nil},
 		},
 		"pod": {
 			// Single-line pod declaration
 			{`(#[|=])\s`, Keyword, Push("pod-single")},
 			// Multi-line pod declaration
 			{
-				"(?<keyword>#[|=])(?<opening_delimiters>(?<delimiter>" + bracketsPattern + `)\k<delimiter>*)(?<value>)(?<closing_delimiters>)`,
+				"(?<keyword>#[|=])(?<opening_delimiters>(?<delimiter>" + delimiterPattern + `)\k<delimiter>*)(?<value>)(?<closing_delimiters>)`,
 				ByGroupNames(
 					map[string]Emitter{
 						`keyword`:            Keyword,
@@ -1033,7 +1033,7 @@ func rakuRules() Rules {
 						`value`:              UsingSelf("pod-declaration"),
 						`closing_delimiters`: Punctuation,
 					}),
-				findBrackets(rakuPodDeclaration),
+				locateDelimiters(rakuPodDeclaration),
 			},
 			Include("pod-blocks"),
 		},
@@ -1057,7 +1057,7 @@ func rakuRules() Rules {
 						`value`:              UsingSelf("pod-begin"),
 						`closing_delimiters`: Keyword,
 					}),
-				findBrackets(rakuPod),
+				locateDelimiters(rakuPod),
 			},
 			// =for ...
 			{
@@ -1154,7 +1154,7 @@ func rakuRules() Rules {
 			{
 				`(?<keyword>[CBIUDTKRPAELZVMSXN])(?<opening_delimiters><+|«)`,
 				ByGroups(Keyword, Punctuation),
-				findBrackets(rakuPodFormatter),
+				locateDelimiters(rakuPodFormatter),
 			},
 		},
 		"pod-formatter": {

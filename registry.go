@@ -178,6 +178,7 @@ func (l *LexerRegistry) Match(filename string) Lexer {
 
 // Analyse text content and return the "best" lexer..
 func (l *LexerRegistry) Analyse(text string) Lexer {
+	// For input-dependent highlighting failures, check analyser selection and ties first.
 	var picked Lexer
 	highest := float32(0.0)
 	for _, lexer := range l.Lexers {

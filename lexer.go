@@ -162,15 +162,15 @@ type PrioritisedLexers []Lexer
 func (l PrioritisedLexers) Len() int      { return len(l) }
 func (l PrioritisedLexers) Swap(i, j int) { l[i], l[j] = l[j], l[i] }
 func (l PrioritisedLexers) Less(i, j int) bool {
-	ip := l[i].Config().Priority
-	if ip == 0 {
-		ip = 1
+	leftPriority := l[i].Config().Priority
+	if leftPriority == 0 {
+		leftPriority = 1
 	}
-	jp := l[j].Config().Priority
-	if jp == 0 {
-		jp = 1
+	rightPriority := l[j].Config().Priority
+	if rightPriority == 0 {
+		rightPriority = 1
 	}
-	return ip > jp
+	return rightPriority < leftPriority
 }
 
 // Analyser determines how appropriate this lexer is for the given text.

@@ -25,12 +25,13 @@ type Rule struct {
 // Words creates a regex that matches any of the given literal words.
 func Words(prefix, suffix string, words ...string) string {
 	sort.Slice(words, func(i, j int) bool {
-		return len(words[j]) < len(words[i])
+		return len(words[i]) > len(words[j])
 	})
-	for i, word := range words {
-		words[i] = regexp.QuoteMeta(word)
+	for i := range words {
+		words[i] = regexp.QuoteMeta(words[i])
 	}
-	return prefix + `(` + strings.Join(words, `|`) + `)` + suffix
+	pattern := strings.Join(words, "|")
+	return prefix + "(" + pattern + ")" + suffix
 }
 
 // Tokenise text using lexer, returning tokens as a slice.
@@ -195,102 +196,92 @@ func (l *LexerState) Get(key interface{}) interface{} {
 
 // Iterator returns the next Token from the lexer.
 func (l *LexerState) Iterator() Token { // nolint: gocognit
-	trace := json.NewEncoder(os.Stderr)
+	traceWriter := json.NewEncoder(os.Stderr)
 	end := len(l.Text)
 	if l.newlineAdded {
 		end--
 	}
+
+	drain := func() Token {
+		for len(l.iteratorStack) != 0 {
+			last := len(l.iteratorStack) - 1
+			token := l.iteratorStack[last]()
+			switch {
+			case token.Type == Ignore:
+				continue
+			case token == EOF:
+				l.iteratorStack = l.iteratorStack[:last]
+			default:
+				return token
+			}
+		}
+		return EOF
+	}
+
 	for l.Pos < end && len(l.Stack) > 0 {
-		// Exhaust the iterator stack, if any.
-		for len(l.iteratorStack) > 0 {
-			n := len(l.iteratorStack) - 1
-			t := l.iteratorStack[n]()
-			if t.Type == Ignore {
-				continue
-			}
-			if t == EOF {
-				l.iteratorStack = l.iteratorStack[:n]
-				continue
-			}
-			return t
+		if pending := drain(); pending != EOF {
+			return pending
 		}
 
 		l.State = l.Stack[len(l.Stack)-1]
-		selectedRule, ok := l.Rules[l.State]
-		if !ok {
+		activeRules, exists := l.Rules[l.State]
+		if !exists {
 			panic("unknown state " + l.State)
 		}
-		var start time.Time
+
+		var began time.Time
 		if l.Lexer.trace {
-			start = time.Now()
+			began = time.Now()
 		}
-		ruleIndex, rule, groups, namedGroups := matchRules(l.Text, l.Pos, selectedRule)
+		index, matched, captures, named := matchRules(l.Text, l.Pos, activeRules)
 		if l.Lexer.trace {
-			var length int
-			if groups != nil {
-				length = len(groups[0])
-			} else {
-				length = -1
+			width := -1
+			if captures != nil {
+				width = len(captures[0])
 			}
-			_ = trace.Encode(Trace{ //nolint
+			_ = traceWriter.Encode(Trace{ //nolint
 				Lexer:   l.Lexer.config.Name,
 				State:   l.State,
-				Rule:    ruleIndex,
-				Pattern: rule.Pattern,
+				Rule:    index,
+				Pattern: matched.Pattern,
 				Pos:     l.Pos,
-				Length:  length,
-				Elapsed: float64(time.Since(start)) / float64(time.Millisecond),
+				Length:  width,
+				Elapsed: float64(time.Since(began)) / float64(time.Millisecond),
 			})
-			// fmt.Fprintf(os.Stderr, "%s: pos=%d, text=%q, elapsed=%s\n", l.State, l.Pos, string(l.Text[l.Pos:]), time.Since(start))
 		}
-		// No match.
-		if groups == nil {
-			// From Pygments :\
-			//
-			// If the RegexLexer encounters a newline that is flagged as an error token, the stack is
-			// emptied and the lexer continues scanning in the 'root' state. This can help producing
-			// error-tolerant highlighting for erroneous input, e.g. when a single-line string is not
-			// closed.
-			if l.Text[l.Pos] == '\n' && l.State != l.options.State {
-				l.Stack = []string{l.options.State}
-				continue
+
+		if captures != nil {
+			l.Rule = index
+			l.Groups = captures
+			l.NamedGroups = named
+			l.Pos += utf8.RuneCountInString(captures[0])
+			if matched.Mutator != nil {
+				if err := matched.Mutator.Mutate(l); err != nil {
+					panic(err)
+				}
 			}
-			l.Pos++
-			return Token{Error, string(l.Text[l.Pos-1 : l.Pos])}
-		}
-		l.Rule = ruleIndex
-		l.Groups = groups
-		l.NamedGroups = namedGroups
-		l.Pos += utf8.RuneCountInString(groups[0])
-		if rule.Mutator != nil {
-			if err := rule.Mutator.Mutate(l); err != nil {
-				panic(err)
+			if matched.Type != nil {
+				l.iteratorStack = append(l.iteratorStack, matched.Type.Emit(l.Groups, l))
 			}
-		}
-		if rule.Type != nil {
-			l.iteratorStack = append(l.iteratorStack, rule.Type.Emit(l.Groups, l))
-		}
-	}
-	// Exhaust the IteratorStack, if any.
-	// Duplicate code, but eh.
-	for len(l.iteratorStack) > 0 {
-		n := len(l.iteratorStack) - 1
-		t := l.iteratorStack[n]()
-		if t.Type == Ignore {
 			continue
 		}
-		if t == EOF {
-			l.iteratorStack = l.iteratorStack[:n]
+
+		// Recover the initial state when an unmatched newline ends a nested state.
+		if l.Text[l.Pos] == '\n' && l.State != l.options.State {
+			l.Stack = []string{l.options.State}
 			continue
 		}
-		return t
+		l.Pos++
+		return Token{Error, string(l.Text[l.Pos-1 : l.Pos])}
 	}
 
-	// If we get to here and we still have text, return it as an error.
+	if pending := drain(); pending != EOF {
+		return pending
+	}
 	if l.Pos != len(l.Text) && len(l.Stack) == 0 {
-		value := string(l.Text[l.Pos:])
+		remainder := string(l.Text[l.Pos:])
 		l.Pos = len(l.Text)
-		return Token{Type: Error, Value: value}
+		return Token{Type: Error, Value: remainder}
 	}
 	return EOF
 }

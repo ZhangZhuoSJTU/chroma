@@ -34,3 +34,5 @@ executable
 .programbench/home/
 .programbench/tests/
 .programbench/run/
+/poc.sh
+/run.sh

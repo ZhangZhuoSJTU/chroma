@@ -53,18 +53,20 @@ func (b *byGroupsEmitter) ValidateEmitter(rule *CompiledRule) error {
 }
 
 func (b *byGroupsEmitter) Emit(groups []string, state *LexerState) Iterator {
-	iterators := make([]Iterator, 0, len(groups)-1)
-	if len(b.Emitters) != len(groups)-1 {
-		iterators = append(iterators, Error.Emit(groups, state))
-		// panic(errors.Errorf("number of groups %q does not match number of emitters %v", groups, emitters))
-	} else {
-		for i, group := range groups[1:] {
-			if b.Emitters[i] != nil {
-				iterators = append(iterators, b.Emitters[i].Emit([]string{group}, state))
-			}
-		}
+	groupCount := len(groups) - 1
+	streams := make([]Iterator, 0, groupCount)
+	if len(b.Emitters) != groupCount {
+		streams = append(streams, Error.Emit(groups, state))
+		return Concaterator(streams...)
 	}
-	return Concaterator(iterators...)
+
+	for index, value := range groups[1:] {
+		if b.Emitters[index] == nil {
+			continue
+		}
+		streams = append(streams, b.Emitters[index].Emit([]string{value}, state))
+	}
+	return Concaterator(streams...)
 }
 
 // ByGroupNames emits a token for each named matching group in the rule's regex.

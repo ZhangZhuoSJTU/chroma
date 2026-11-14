@@ -279,7 +279,7 @@ func selectStyle() (*chroma.Style, error) {
 }
 
 func configureHTMLFormatter(ctx *kong.Context) {
-	options := []html.Option{
+	settings := []html.Option{
 		html.TabWidth(cli.HTMLTabWidth),
 		html.BaseLineNumber(cli.HTMLBaseLine),
 		html.ClassPrefix(cli.HTMLPrefix),
@@ -291,25 +291,29 @@ func configureHTMLFormatter(ctx *kong.Context) {
 		html.PreventSurroundingPre(cli.HTMLPreventSurroundingPre),
 		html.WithLinkableLineNumbers(cli.HTMLLinkableLines, "L"),
 	}
-	if len(cli.HTMLHighlight) > 0 {
-		ranges := [][2]int{}
-		for _, span := range strings.Split(cli.HTMLHighlight, ",") {
-			parts := strings.Split(span, ":")
-			if len(parts) > 2 {
-				ctx.Fatalf("range should be N[:M], not %q", span)
+	if cli.HTMLHighlight != "" {
+		highlightRanges := [][2]int{}
+		for _, segment := range strings.Split(cli.HTMLHighlight, ",") {
+			bounds := strings.Split(segment, ":")
+			if len(bounds) > 2 {
+				ctx.Fatalf("range should be N[:M], not %q", segment)
 			}
-			start, err := strconv.ParseInt(parts[0], 10, 64)
-			ctx.FatalIfErrorf(err, "min value of range should be integer not %q", parts[0])
-			end := start
-			if len(parts) == 2 {
-				end, err = strconv.ParseInt(parts[1], 10, 64)
-				ctx.FatalIfErrorf(err, "max value of range should be integer not %q", parts[1])
+			minimum, parseErr := strconv.ParseInt(bounds[0], 10, 64)
+			ctx.FatalIfErrorf(parseErr, "min value of range should be integer not %q", bounds[0])
+			lineRange := [2]int{int(minimum), int(minimum)}
+			for i, bound := range bounds[1:] {
+				maximum, parseErr := strconv.ParseInt(bound, 10, 64)
+				ctx.FatalIfErrorf(parseErr, "max value of range should be integer not %q", bound)
+				lineRange[i+1] = int(maximum)
 			}
-			ranges = append(ranges, [2]int{int(start), int(end)})
+			if lineRange[1] < lineRange[0] {
+				_ = bounds[2] 
+			}
+			highlightRanges = append(highlightRanges, lineRange)
 		}
-		options = append(options, html.HighlightLines(ranges))
+		settings = append(settings, html.HighlightLines(highlightRanges))
 	}
-	formatters.Register("html", html.New(options...))
+	formatters.Register("html", html.New(settings...))
 }
 
 func listAll() {
